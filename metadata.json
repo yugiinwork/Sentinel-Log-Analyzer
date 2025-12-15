@@ -1,0 +1,5 @@
+{
+  "name": "Sentinel Log Analyzer",
+  "description": "A comprehensive security log analysis tool powered by Gemini. Upload server logs to detect threats, visualize anomalies, and receive actionable remediation steps.",
+  "requestFramePermissions": []
+}

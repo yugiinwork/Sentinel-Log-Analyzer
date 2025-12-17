@@ -1,81 +1,77 @@
 import React, { useState } from 'react';
-import { Shield } from 'lucide-react';
-import { analyzeLogsWithGemini } from './services/geminiService';
-import { AnalysisResult } from './types';
-import FileUpload from './components/FileUpload';
+import Sidebar from './components/Sidebar';
+import LiveMonitor from './components/LiveMonitor';
 import Dashboard from './components/Dashboard';
+import FileUpload from './components/FileUpload';
+import Connectors from './components/Connectors';
+import { AnalysisResult } from './types';
+import { analyzeLogsWithGemini } from './services/geminiService';
 
 const App: React.FC = () => {
+  const [currentView, setCurrentView] = useState('live');
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleAnalyze = async (content: string) => {
-    setLoading(true);
+  const handleAnalyze = async (content: string, privacyMode: boolean) => {
+    setIsAnalyzing(true);
     setError(null);
     try {
-      const result = await analyzeLogsWithGemini(content);
+      const result = await analyzeLogsWithGemini(content, privacyMode);
       setAnalysis(result);
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred during analysis.");
+      setError(err.message || "Analysis failed");
     } finally {
-      setLoading(false);
+      setIsAnalyzing(false);
     }
   };
 
-  const resetAnalysis = () => {
-    setAnalysis(null);
-    setError(null);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
+    <div className="flex h-screen bg-slate-950 text-slate-200 font-sans overflow-hidden selection:bg-emerald-500/30">
+      <Sidebar currentView={currentView} onViewChange={setCurrentView} />
       
-      {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={resetAnalysis}>
-            <div className="bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20">
-              <Shield className="text-emerald-500" size={24} />
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-white">
-              Sentinel <span className="text-slate-500 font-medium hidden sm:inline">| Security Log Analyzer</span>
-            </h1>
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative bg-slate-950">
+        {/* Top Header */}
+        <header className="h-16 border-b border-slate-800 bg-slate-950 flex items-center px-6 justify-between shrink-0">
+          <h2 className="text-lg font-bold text-white capitalize flex items-center gap-2">
+             {currentView === 'live' ? 'Security Operations Center' : 
+              currentView === 'forensics' ? 'Digital Forensics Lab' : 
+              'Data Ingestion Pipelines'}
+          </h2>
+          <div className="flex items-center gap-3">
+             <div className="px-3 py-1 bg-slate-900 rounded-full border border-slate-800 text-xs font-mono text-slate-400">
+                v2.5.0-stable
+             </div>
           </div>
-          <div className="flex items-center gap-4">
-             <div className="text-xs text-slate-500 hidden sm:block">Powered by Gemini 2.5 Flash</div>
-          </div>
+        </header>
+
+        {/* View Content */}
+        <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-slate-800">
+           {currentView === 'live' && <LiveMonitor />}
+           
+           {currentView === 'forensics' && (
+             <div className="animate-in fade-in duration-300">
+               {!analysis ? (
+                 <div className="max-w-4xl mx-auto mt-8">
+                    <div className="mb-8 p-6 bg-slate-900 rounded-xl border border-slate-800">
+                       <h1 className="text-2xl font-bold text-white mb-2">Log Analysis Engine</h1>
+                       <p className="text-slate-400 text-sm">Upload raw server logs, firewall traces, or application events. Sentinel's AI will parse, categorize, and identify threats implicitly.</p>
+                    </div>
+                    {error && <div className="p-4 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg mb-6 text-sm">{error}</div>}
+                    <FileUpload onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} />
+                 </div>
+               ) : (
+                 <Dashboard data={analysis} onReset={() => setAnalysis(null)} />
+               )}
+             </div>
+           )}
+
+           {currentView === 'connectors' && (
+             <div className="animate-in fade-in duration-300">
+                <Connectors />
+             </div>
+           )}
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        
-        {error && (
-          <div className="mb-8 p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-200 flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-            <Shield className="text-red-500" size={20} />
-            <p className="text-sm font-medium">{error}</p>
-            <button onClick={() => setError(null)} className="ml-auto text-xs hover:underline opacity-80">Dismiss</button>
-          </div>
-        )}
-
-        {!analysis ? (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8">
-            <div className="space-y-4 max-w-2xl">
-              <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
-                Intelligent Threat Detection
-              </h2>
-              <p className="text-lg text-slate-400 leading-relaxed">
-                Upload your server logs, firewall traces, or application events. 
-                Our AI engine parses thousands of lines instantly to identify vulnerabilities, brute force attacks, and anomalies.
-              </p>
-            </div>
-            <FileUpload onAnalyze={handleAnalyze} isAnalyzing={loading} />
-          </div>
-        ) : (
-          <Dashboard data={analysis} onReset={resetAnalysis} />
-        )}
-
       </main>
     </div>
   );

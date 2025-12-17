@@ -1,8 +1,8 @@
 import React, { useCallback, useState } from 'react';
-import { UploadCloud, FileText, AlertCircle, XCircle } from 'lucide-react';
+import { UploadCloud, FileText, AlertCircle, XCircle, Shield, Lock } from 'lucide-react';
 
 interface FileUploadProps {
-  onAnalyze: (content: string) => void;
+  onAnalyze: (content: string, privacyMode: boolean) => void;
   isAnalyzing: boolean;
 }
 
@@ -14,6 +14,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onAnalyze, isAnalyzing }) => {
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [privacyMode, setPrivacyMode] = useState(false);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -66,7 +67,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onAnalyze, isAnalyzing }) => {
 
   const handleSubmit = () => {
     if (textInput.trim().length === 0) return;
-    onAnalyze(textInput);
+    onAnalyze(textInput, privacyMode);
   };
 
   const loadSampleLogs = () => {
@@ -153,6 +154,30 @@ const FileUpload: React.FC<FileUploadProps> = ({ onAnalyze, isAnalyzing }) => {
           placeholder="Paste system logs, firewall logs, or error traces here..."
           className="w-full h-64 bg-slate-950 border border-slate-700 rounded-lg p-4 font-mono text-sm text-slate-300 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none resize-none transition-all placeholder:text-slate-600"
         />
+        
+        {/* Privacy Mode Toggle */}
+        <div 
+          onClick={() => setPrivacyMode(!privacyMode)}
+          className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
+            privacyMode 
+            ? 'bg-emerald-500/10 border-emerald-500/30' 
+            : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-md ${privacyMode ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
+              {privacyMode ? <Lock size={18} /> : <Shield size={18} />}
+            </div>
+            <div>
+              <div className="text-sm font-medium text-slate-200">Privacy Mode (Hardening)</div>
+              <div className="text-xs text-slate-500">Automatically mask IPs and Email addresses before analysis</div>
+            </div>
+          </div>
+          <div className={`w-10 h-5 rounded-full relative transition-colors ${privacyMode ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+            <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${privacyMode ? 'left-6' : 'left-1'}`} />
+          </div>
+        </div>
+
         <div className="flex items-start gap-2 text-xs text-slate-500">
             <AlertCircle size={14} className="mt-0.5" />
             <p>For best results, ensure logs contain timestamps and event details. Max file size: {MAX_FILE_SIZE_MB}MB.</p>
@@ -178,7 +203,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onAnalyze, isAnalyzing }) => {
             Analyzing Logs with Gemini...
           </span>
         ) : (
-          "Analyze Logs"
+          `Analyze Logs ${privacyMode ? '(Secure)' : ''}`
         )}
       </button>
     </div>

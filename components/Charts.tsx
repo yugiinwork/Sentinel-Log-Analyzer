@@ -5,10 +5,6 @@ import {
 } from 'recharts';
 import { AnalysisResult, Severity } from '../types';
 
-interface ChartsProps {
-  data: AnalysisResult;
-}
-
 const COLORS = {
   LOW: '#3B82F6',      // Blue
   MEDIUM: '#F59E0B',   // Amber
@@ -16,12 +12,12 @@ const COLORS = {
   CRITICAL: '#7F1D1D'  // Dark Red
 };
 
-const PIE_COLORS = ['#10B981', '#F59E0B', '#EF4444', '#6366F1', '#EC4899'];
+const PIE_COLORS = ['#10B981', '#F59E0B', '#EF4444', '#6366F1', '#EC4899', '#8B5CF6'];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-slate-800 border border-slate-700 p-3 rounded shadow-xl text-xs">
+      <div className="bg-slate-800 border border-slate-700 p-3 rounded shadow-xl text-xs z-50">
         <p className="font-semibold text-slate-200 mb-1">{label}</p>
         {payload.map((entry: any, index: number) => (
           <p key={index} style={{ color: entry.color }}>
@@ -84,7 +80,7 @@ export const AttackDistributionChart: React.FC<{ data: AnalysisResult['topAttack
         <BarChart
           layout="vertical"
           data={data}
-          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+          margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
           <XAxis type="number" stroke="#64748b" fontSize={12} hide />
@@ -92,7 +88,7 @@ export const AttackDistributionChart: React.FC<{ data: AnalysisResult['topAttack
             dataKey="name" 
             type="category" 
             stroke="#94a3b8" 
-            fontSize={11} 
+            fontSize={10} 
             width={100}
             tickLine={false}
             axisLine={false}
@@ -104,6 +100,63 @@ export const AttackDistributionChart: React.FC<{ data: AnalysisResult['topAttack
             ))}
           </Bar>
         </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+export const GeoDistributionChart: React.FC<{ data: AnalysisResult['geoData'] }> = ({ data }) => {
+  return (
+    <div className="h-[300px] w-full">
+      <h3 className="text-sm font-medium text-slate-400 mb-4 uppercase tracking-wider">Source Geography</h3>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
+          data={data}
+          margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+          <XAxis 
+            dataKey="country" 
+            stroke="#94a3b8" 
+            fontSize={11} 
+            tickLine={false}
+            axisLine={false}
+          />
+          <YAxis 
+            stroke="#64748b" 
+            fontSize={12} 
+            hide
+          />
+          <Tooltip content={<CustomTooltip />} cursor={{fill: '#1e293b'}} />
+          <Bar dataKey="count" name="Events" fill="#6366F1" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+export const LogTypeChart: React.FC<{ data: AnalysisResult['logTypes'] }> = ({ data }) => {
+  return (
+    <div className="h-[300px] w-full">
+      <h3 className="text-sm font-medium text-slate-400 mb-4 uppercase tracking-wider">Log Source Breakdown</h3>
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            innerRadius={60}
+            outerRadius={80}
+            paddingAngle={5}
+            dataKey="count"
+          >
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+            ))}
+          </Pie>
+          <Tooltip content={<CustomTooltip />} />
+          <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }} />
+        </PieChart>
       </ResponsiveContainer>
     </div>
   );

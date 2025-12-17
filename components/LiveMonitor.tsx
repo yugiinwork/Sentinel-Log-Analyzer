@@ -35,10 +35,16 @@ const LiveMonitor: React.FC = () => {
   // Playbook State
   const [isPlaybookOpen, setIsPlaybookOpen] = useState(false);
   const [playbookLoading, setPlaybookLoading] = useState(false);
+  const [playbookError, setPlaybookError] = useState<string | null>(null);
   const [currentPlaybook, setCurrentPlaybook] = useState<PlaybookResponse | null>(null);
   
   const ws = useRef<WebSocket | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // Reconnection Refs
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const isManualDisconnectRef = useRef(false);
 
   // Initialize Traffic Chart Data
   useEffect(() => {
@@ -68,6 +74,8 @@ const LiveMonitor: React.FC = () => {
 
     return () => {
         clearInterval(trafficInterval);
+        isManualDisconnectRef.current = true;
+        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         if (ws.current) ws.current.close();
     };
   }, []);
@@ -80,6 +88,7 @@ const LiveMonitor: React.FC = () => {
   const handleRemediate = async (alert: ExtendedAlert) => {
     setIsPlaybookOpen(true);
     setPlaybookLoading(true);
+    setPlaybookError(null);
     setCurrentPlaybook(null);
     try {
         const pseudoEvent = {
@@ -92,8 +101,9 @@ const LiveMonitor: React.FC = () => {
         };
         const playbook = await generatePlaybook(pseudoEvent);
         setCurrentPlaybook(playbook);
-    } catch (err) {
+    } catch (err: any) {
         console.error("Failed to generate playbook", err);
+        setPlaybookError("Unable to generate playbook. Please ensure your API Key is configured correctly.");
     } finally {
         setPlaybookLoading(false);
     }
@@ -105,62 +115,24 @@ const LiveMonitor: React.FC = () => {
       ));
   };
 
-  const initConnection = (url: string) => {
-    if (ws.current?.readyState === WebSocket.OPEN) return;
-    
-    setStatus('connecting');
-    setErrorMessage('');
-    
-    try {
-      const socket = new WebSocket(url);
-      ws.current = socket;
-
-      socket.onopen = () => {
-        setStatus('connected');
-        setLogs(prev => [...prev, `[SYSTEM] Connected to Sentinel Sensor at ${url}`]);
-      };
-
-      socket.onmessage = (event) => {
-        handleIncomingMessage(event.data);
-      };
-
-      socket.onerror = () => {
-        setStatus('error');
-        setErrorMessage(`Sensor unreachable. Ensure 'node server.js' is running with sudo.`);
-      };
-
-      socket.onclose = () => {
-        if (status !== 'error') setStatus('disconnected');
-      };
-    } catch (err: any) {
-      setStatus('error');
-      setErrorMessage(err.message);
-    }
+  const addAlert = (message: string, severity: Severity, timestamp: string, label: string) => {
+    // Avoid duplicate floods
+    setAlerts(prev => {
+        if (prev.length > 0 && prev[0].message.includes(message)) return prev;
+        const newAlert: ExtendedAlert = {
+            id: Math.random().toString(36).substr(2, 9),
+            message: label ? `[${label}] ${message}` : message,
+            severity,
+            timestamp,
+            escalated: false
+        };
+        return [newAlert, ...prev].slice(0, 15);
+    }); 
   };
 
-  const disconnect = () => {
-    if (ws.current) {
-      ws.current.close();
-      ws.current = null;
-    }
-    setStatus('disconnected');
+  const removeAlert = (id: string) => {
+    setAlerts(prev => prev.filter(a => a.id !== id));
   };
-
-  const handleIncomingMessage = useCallback((data: any) => {
-    setPacketCount(prev => prev + 1);
-    packetCountRef.current += 1;
-    
-    let logMessage = typeof data === 'string' ? data : JSON.stringify(data);
-    const timestamp = new Date().toLocaleTimeString();
-    
-    // Ensure timestamp format
-    if(!logMessage.startsWith('[')) {
-        logMessage = `[${timestamp}] ${logMessage}`;
-    }
-
-    setLogs(prev => [...prev.slice(-99), logMessage]);
-    analyzeLogForThreats(logMessage, timestamp);
-  }, []);
 
   const analyzeLogForThreats = (message: string, timestamp: string) => {
     if (!message) return;
@@ -189,24 +161,112 @@ const LiveMonitor: React.FC = () => {
     }
   };
 
-  const addAlert = (message: string, severity: Severity, timestamp: string, label: string) => {
-    // Avoid duplicate floods
-    setAlerts(prev => {
-        if (prev.length > 0 && prev[0].message.includes(message)) return prev;
-        const newAlert: ExtendedAlert = {
-            id: Math.random().toString(36).substr(2, 9),
-            message: label ? `[${label}] ${message}` : message,
-            severity,
-            timestamp,
-            escalated: false
-        };
-        return [newAlert, ...prev].slice(0, 15);
-    }); 
-  };
+  const handleIncomingMessage = useCallback((data: any) => {
+    setPacketCount(prev => prev + 1);
+    packetCountRef.current += 1;
+    
+    let logDisplay = typeof data === 'string' ? data : JSON.stringify(data);
+    const timestamp = new Date().toLocaleTimeString();
 
-  const removeAlert = (id: string) => {
-    setAlerts(prev => prev.filter(a => a.id !== id));
-  };
+    // Check if data is a JSON handshake object
+    try {
+        if (typeof data === 'string' && data.startsWith('{')) {
+            const parsed = JSON.parse(data);
+            if (parsed.message) {
+                logDisplay = parsed.message;
+            }
+        }
+    } catch(e) {
+        // Ignore JSON parse error, treat as text
+    }
+    
+    // Ensure timestamp format if not present (Server sends ISO brackets, client logs need local time if missing)
+    if(!logDisplay.trim().startsWith('[')) {
+        logDisplay = `[${timestamp}] ${logDisplay}`;
+    }
+
+    setLogs(prev => [...prev.slice(-99), logDisplay]);
+    analyzeLogForThreats(logDisplay, timestamp);
+  }, []);
+
+  const initConnection = useCallback((url: string) => {
+    // Clear pending reconnects
+    if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+    }
+
+    const activeSocket = ws.current;
+    if (activeSocket) {
+        if (activeSocket.url === url && (activeSocket.readyState === WebSocket.OPEN || activeSocket.readyState === WebSocket.CONNECTING)) {
+            return;
+        }
+        activeSocket.close();
+    }
+    
+    setStatus('connecting');
+    setErrorMessage('');
+    isManualDisconnectRef.current = false;
+    
+    try {
+      const socket = new WebSocket(url);
+      ws.current = socket;
+
+      socket.onopen = () => {
+        setStatus('connected');
+        setLogs(prev => [...prev, `[SYSTEM] Connected to Sentinel Sensor at ${url}`]);
+        reconnectAttemptsRef.current = 0; // Reset attempts
+      };
+
+      socket.onmessage = (event) => {
+        handleIncomingMessage(event.data);
+      };
+
+      socket.onerror = () => {
+        // Log locally, let onclose handle the state
+        // console.error('WebSocket Error');
+      };
+
+      socket.onclose = () => {
+        if (isManualDisconnectRef.current) {
+            setStatus('disconnected');
+            return;
+        }
+
+        setStatus('error');
+        
+        // Exponential backoff: 5s, 10s, 20s, 40s...
+        const attempt = reconnectAttemptsRef.current;
+        const delay = 5000 * Math.pow(2, attempt);
+        const delaySec = delay / 1000;
+
+        setErrorMessage(`Connection lost. Reconnecting in ${delaySec}s...`);
+        setLogs(prev => [...prev, `[SYSTEM] Connection lost. Reconnecting in ${delaySec}s (Attempt ${attempt + 1})...`]);
+
+        reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectAttemptsRef.current += 1;
+            initConnection(url);
+        }, delay);
+      };
+    } catch (err: any) {
+      setStatus('error');
+      setErrorMessage(err.message);
+    }
+  }, [handleIncomingMessage]);
+
+  const disconnect = useCallback(() => {
+    isManualDisconnectRef.current = true;
+    if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+    }
+    if (ws.current) {
+      ws.current.close();
+      ws.current = null;
+    }
+    setStatus('disconnected');
+    reconnectAttemptsRef.current = 0;
+  }, []);
 
   return (
     <div className="relative w-full space-y-6">
@@ -215,7 +275,8 @@ const LiveMonitor: React.FC = () => {
       {isPlaybookOpen && (
         <PlaybookPanel 
           playbook={currentPlaybook} 
-          isLoading={playbookLoading} 
+          isLoading={playbookLoading}
+          error={playbookError}
           onClose={() => setIsPlaybookOpen(false)} 
         />
       )}
@@ -249,7 +310,7 @@ const LiveMonitor: React.FC = () => {
                   </div>
                   
                   {errorMessage && (
-                      <div className="mb-4 p-3 bg-red-950/50 border border-red-900/50 rounded text-xs text-red-300">
+                      <div className="mb-4 p-3 bg-red-950/50 border border-red-900/50 rounded text-xs text-red-300 animate-pulse">
                           {errorMessage}
                       </div>
                   )}
@@ -355,12 +416,14 @@ const LiveMonitor: React.FC = () => {
                                 </div>
                              ) : (
                                  <div className="flex gap-2">
-                                    <button 
-                                        onClick={() => handleRemediate(alert)}
-                                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded transition-colors border border-slate-700"
-                                    >
-                                        <Zap size={10} /> REMEDIATE
-                                    </button>
+                                    {(alert.severity === Severity.CRITICAL || alert.severity === Severity.HIGH) && (
+                                        <button 
+                                            onClick={() => handleRemediate(alert)}
+                                            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded transition-colors border border-slate-700"
+                                        >
+                                            <Zap size={10} /> REMEDIATE
+                                        </button>
+                                    )}
                                     <button 
                                         onClick={() => handleEscalate(alert.id)}
                                         className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-orange-600 hover:text-white text-slate-200 text-[10px] font-bold rounded transition-colors border border-slate-700 hover:border-orange-500"

@@ -15,17 +15,20 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
   // Playbook State
   const [isPlaybookOpen, setIsPlaybookOpen] = useState(false);
   const [playbookLoading, setPlaybookLoading] = useState(false);
+  const [playbookError, setPlaybookError] = useState<string | null>(null);
   const [currentPlaybook, setCurrentPlaybook] = useState<PlaybookResponse | null>(null);
 
   const handleRunPlaybook = async (event: LogEvent) => {
     setIsPlaybookOpen(true);
     setPlaybookLoading(true);
+    setPlaybookError(null);
     setCurrentPlaybook(null);
     try {
       const playbook = await generatePlaybook(event);
       setCurrentPlaybook(playbook);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to generate playbook", err);
+      setPlaybookError("Unable to generate playbook. Please ensure your API Key is configured correctly.");
     } finally {
       setPlaybookLoading(false);
     }
@@ -52,7 +55,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
       {isPlaybookOpen && (
         <PlaybookPanel 
           playbook={currentPlaybook} 
-          isLoading={playbookLoading} 
+          isLoading={playbookLoading}
+          error={playbookError}
           onClose={() => setIsPlaybookOpen(false)} 
         />
       )}

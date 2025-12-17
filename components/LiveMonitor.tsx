@@ -115,7 +115,7 @@ const LiveMonitor: React.FC = () => {
       ));
   };
 
-  const addAlert = (message: string, severity: Severity, timestamp: string, label: string) => {
+  const addAlert = useCallback((message: string, severity: Severity, timestamp: string, label: string) => {
     // Avoid duplicate floods
     setAlerts(prev => {
         if (prev.length > 0 && prev[0].message.includes(message)) return prev;
@@ -128,13 +128,13 @@ const LiveMonitor: React.FC = () => {
         };
         return [newAlert, ...prev].slice(0, 15);
     }); 
-  };
+  }, []);
 
   const removeAlert = (id: string) => {
     setAlerts(prev => prev.filter(a => a.id !== id));
   };
 
-  const analyzeLogForThreats = (message: string, timestamp: string) => {
+  const analyzeLogForThreats = useCallback((message: string, timestamp: string) => {
     if (!message) return;
     const lowerMsg = message.toLowerCase();
     
@@ -159,7 +159,7 @@ const LiveMonitor: React.FC = () => {
     if (severity) {
       addAlert(message, severity, timestamp, threatLabel);
     }
-  };
+  }, [addAlert]);
 
   const handleIncomingMessage = useCallback((data: any) => {
     setPacketCount(prev => prev + 1);
@@ -187,7 +187,7 @@ const LiveMonitor: React.FC = () => {
 
     setLogs(prev => [...prev.slice(-99), logDisplay]);
     analyzeLogForThreats(logDisplay, timestamp);
-  }, []);
+  }, [analyzeLogForThreats]);
 
   const initConnection = useCallback((url: string) => {
     // Clear pending reconnects

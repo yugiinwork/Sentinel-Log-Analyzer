@@ -1,14 +1,16 @@
 import React from 'react';
-import { Activity, FileText, Network, Shield } from 'lucide-react';
+import { Activity, FileText, Network, Shield, Briefcase } from 'lucide-react';
 
 interface SidebarProps {
   currentView: string;
   onViewChange: (view: string) => void;
+  incidentCount?: number;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, incidentCount = 0 }) => {
   const menu = [
     { id: 'live', label: 'Live Operations', icon: <Activity size={20} /> },
+    { id: 'incidents', label: 'Incidents', icon: <Briefcase size={20} />, badge: incidentCount },
     { id: 'forensics', label: 'Forensics Lab', icon: <FileText size={20} /> },
     { id: 'connectors', label: 'Data Sources', icon: <Network size={20} /> },
   ];
@@ -28,14 +30,21 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
           <button
             key={item.id}
             onClick={() => onViewChange(item.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all group ${
               currentView === item.id 
                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-900/20' 
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
           >
-            {item.icon}
-            {item.label}
+            <div className="flex items-center gap-3">
+              {item.icon}
+              {item.label}
+            </div>
+            {item.badge && item.badge > 0 && (
+               <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm shadow-red-900/50">
+                 {item.badge}
+               </span>
+            )}
           </button>
         ))}
       </nav>

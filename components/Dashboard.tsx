@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AnalysisResult, Severity, LogEvent, PlaybookResponse } from '../types';
+import { AnalysisResult, Severity, LogEvent, PlaybookResponse, Incident } from '../types';
 import { TimelineChart, AttackDistributionChart, SeverityChart, GeoDistributionChart, LogTypeChart } from './Charts';
 import LogTable from './LogTable';
 import PlaybookPanel from './PlaybookPanel';
@@ -9,9 +9,10 @@ import { ShieldAlert, ShieldCheck, Activity, Terminal, TrendingUp, TrendingDown,
 interface DashboardProps {
   data: AnalysisResult;
   onReset: () => void;
+  onCreateIncident?: (incident: Incident) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
+const Dashboard: React.FC<DashboardProps> = ({ data, onReset, onCreateIncident }) => {
   // Playbook State
   const [isPlaybookOpen, setIsPlaybookOpen] = useState(false);
   const [playbookLoading, setPlaybookLoading] = useState(false);
@@ -169,7 +170,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onReset }) => {
             </div>
 
             {/* Detailed Table */}
-            <LogTable events={data.events} onRunPlaybook={handleRunPlaybook} />
+            <LogTable events={data.events} onRunPlaybook={handleRunPlaybook} onCreateIncident={onCreateIncident} />
         </div>
     </div>
   );

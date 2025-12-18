@@ -1,16 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { LogEvent, Severity } from '../types';
-import { AlertTriangle, Shield, Info, AlertOctagon, ChevronDown, Search, Zap, Filter } from 'lucide-react';
+import { LogEvent, Severity, Incident } from '../types';
+import { AlertTriangle, Shield, Info, AlertOctagon, ChevronDown, Search, Zap, Filter, Briefcase } from 'lucide-react';
 
 interface LogTableProps {
   events: LogEvent[];
   onRunPlaybook: (event: LogEvent) => void;
+  onCreateIncident?: (incident: Incident) => void;
 }
 
-const LogTable: React.FC<LogTableProps> = ({ events, onRunPlaybook }) => {
+const LogTable: React.FC<LogTableProps> = ({ events, onRunPlaybook, onCreateIncident }) => {
   const [filter, setFilter] = useState('');
   const [severityFilter, setSeverityFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [promotedEvents, setPromotedEvents] = useState<Set<string>>(new Set());
 
   // Extract unique types for the filter dropdown
   const uniqueTypes = useMemo(() => {
@@ -28,6 +30,27 @@ const LogTable: React.FC<LogTableProps> = ({ events, onRunPlaybook }) => {
 
     return matchesSearch && matchesSeverity && matchesType;
   });
+
+  const handlePromoteToIncident = (event: LogEvent, idx: number) => {
+      const eventId = `${event.timestamp}-${idx}`;
+      if (promotedEvents.has(eventId)) return;
+      
+      if (onCreateIncident) {
+        const newIncident: Incident = {
+            id: `INC-${Math.floor(Date.now() / 1000)}`,
+            title: `Forensic Alert: ${event.type}`,
+            severity: event.severity,
+            status: 'OPEN',
+            assignee: 'Unassigned',
+            timestamp: event.timestamp,
+            source: event.source || 'Log File',
+            description: event.message,
+            notes: [`Promoted from forensic log analysis.`, `Remediation hint: ${event.remediation}`]
+        };
+        onCreateIncident(newIncident);
+        setPromotedEvents(prev => new Set(prev).add(eventId));
+      }
+  };
 
   const getSeverityBadge = (severity: Severity) => {
     switch (severity) {
@@ -140,15 +163,27 @@ const LogTable: React.FC<LogTableProps> = ({ events, onRunPlaybook }) => {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    {(event.severity === Severity.CRITICAL || event.severity === Severity.HIGH) && (
-                      <button 
-                        onClick={() => onRunPlaybook(event)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 rounded-md text-xs font-medium transition-all shadow-sm border border-slate-700 hover:border-emerald-500 opacity-0 group-hover:opacity-100"
-                      >
-                        <Zap size={12} />
-                        Run Playbook
-                      </button>
-                    )}
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {(event.severity === Severity.CRITICAL || event.severity === Severity.HIGH) && (
+                            <button 
+                                onClick={() => handlePromoteToIncident(event, idx)}
+                                disabled={promotedEvents.has(`${event.timestamp}-${idx}`)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-300 rounded-md text-xs font-medium transition-all shadow-sm border border-slate-700 hover:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Briefcase size={12} />
+                                {promotedEvents.has(`${event.timestamp}-${idx}`) ? 'Case Opened' : 'Open Case'}
+                            </button>
+                        )}
+                        {(event.severity === Severity.CRITICAL || event.severity === Severity.HIGH) && (
+                        <button 
+                            onClick={() => onRunPlaybook(event)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 rounded-md text-xs font-medium transition-all shadow-sm border border-slate-700 hover:border-emerald-500"
+                        >
+                            <Zap size={12} />
+                            Playbook
+                        </button>
+                        )}
+                    </div>
                   </td>
                 </tr>
               ))

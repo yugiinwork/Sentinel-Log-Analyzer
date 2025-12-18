@@ -21,6 +21,18 @@ export interface AlertNotification {
   timestamp: string;
 }
 
+export interface Incident {
+  id: string;
+  title: string;
+  severity: Severity;
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+  assignee: string;
+  timestamp: string;
+  source: string;
+  description: string;
+  notes: string[];
+}
+
 export interface AnalysisStats {
   totalEvents: number;
   criticalCount: number;

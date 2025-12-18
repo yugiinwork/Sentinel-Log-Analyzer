@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Severity, AlertNotification, PlaybookResponse } from '../types';
+import { Severity, AlertNotification, PlaybookResponse, Incident } from '../types';
 import { generatePlaybook } from '../services/geminiService';
 import PlaybookPanel from './PlaybookPanel';
 import { 
@@ -19,7 +19,11 @@ interface ExtendedAlert extends AlertNotification {
   escalated?: boolean;
 }
 
-const LiveMonitor: React.FC = () => {
+interface LiveMonitorProps {
+  onCreateIncident?: (incident: Incident) => void;
+}
+
+const LiveMonitor: React.FC<LiveMonitorProps> = ({ onCreateIncident }) => {
   const [wsUrl, setWsUrl] = useState('ws://localhost:8080');
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [errorMessage, setErrorMessage] = useState('');
@@ -109,10 +113,25 @@ const LiveMonitor: React.FC = () => {
     }
   };
 
-  const handleEscalate = (id: string) => {
-      setAlerts(prev => prev.map(alert => 
-          alert.id === id ? { ...alert, escalated: true } : alert
+  const handleEscalate = (alert: ExtendedAlert) => {
+      setAlerts(prev => prev.map(a => 
+          a.id === alert.id ? { ...a, escalated: true } : a
       ));
+      
+      if (onCreateIncident) {
+        const newIncident: Incident = {
+          id: `INC-${Math.floor(Date.now() / 1000)}`,
+          title: `Escalated Alert: ${alert.message.substring(0, 50)}...`,
+          severity: alert.severity,
+          status: 'OPEN',
+          assignee: 'Unassigned',
+          timestamp: alert.timestamp,
+          source: 'Live Monitor',
+          description: alert.message,
+          notes: ['Automatically escalated from Live Monitor.']
+        };
+        onCreateIncident(newIncident);
+      }
   };
 
   const addAlert = useCallback((message: string, severity: Severity, timestamp: string, label: string) => {
@@ -412,7 +431,7 @@ const LiveMonitor: React.FC = () => {
                              
                              {alert.escalated ? (
                                 <div className="flex items-center gap-2 text-[10px] text-emerald-400 font-medium px-2 py-1.5 bg-emerald-500/10 rounded">
-                                    <CheckCircle2 size={12} /> Ticket #INC-{Math.floor(Math.random() * 10000)} Created
+                                    <CheckCircle2 size={12} /> Case Created
                                 </div>
                              ) : (
                                  <div className="flex gap-2">
@@ -425,7 +444,7 @@ const LiveMonitor: React.FC = () => {
                                         </button>
                                     )}
                                     <button 
-                                        onClick={() => handleEscalate(alert.id)}
+                                        onClick={() => handleEscalate(alert)}
                                         className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-orange-600 hover:text-white text-slate-200 text-[10px] font-bold rounded transition-colors border border-slate-700 hover:border-orange-500"
                                     >
                                         <ArrowRightCircle size={10} /> ESCALATE
